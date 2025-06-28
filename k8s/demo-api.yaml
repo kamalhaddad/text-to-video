@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-api
+  namespace: text-to-video
+  labels:
+    app: demo-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-api
+  template:
+    metadata:
+      labels:
+        app: demo-api
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: In
+                values:
+                - "true"
+      containers:
+      - name: demo-api
+        image: python:3.11-slim
+        command: 
+        - python
+        - -c
+        - |
+          import json
+          from http.server import BaseHTTPRequestHandler, HTTPServer
+          import uuid
+          from datetime import datetime
+          
+          class DemoHandler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path == '/health':
+                      self.send_response(200)
+                      self.send_header('Content-type', 'application/json')
+                      self.end_headers()
+                      response = {
+                          'status': 'healthy',
+                          'gpu_available': True,
+                          'message': 'Text-to-Video API Demo - Ready for H100 deployment!'
+                      }
+                      self.wfile.write(json.dumps(response).encode())
+                  elif self.path == '/api/system/status':
+                      self.send_response(200)
+                      self.send_header('Content-type', 'application/json')
+                      self.end_headers()
+                      response = {
+                          'available_gpus': 4,
+                          'active_jobs': 0,
+                          'queue_length': 0,
+                          'system_load': {
+                              'gpu_info': {
+                                  'total_gpus': 16,
+                                  'gpu_type': 'H100-80GB'
+                              }
+                          }
+                      }
+                      self.wfile.write(json.dumps(response).encode())
+                  else:
+                      self.send_response(404)
+                      self.end_headers()
+          
+          print("Starting Text-to-Video Demo API on port 8000...")
+          server = HTTPServer(('0.0.0.0', 8000), DemoHandler)
+          server.serve_forever()
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+            nvidia.com/gpu: 1
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-api
+  namespace: text-to-video
+spec:
+  type: NodePort
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30800
+  selector:
+    app: demo-api 

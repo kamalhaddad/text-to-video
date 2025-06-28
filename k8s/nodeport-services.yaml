@@ -1,0 +1,35 @@
+# NodePort Service for Frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-to-video-frontend-nodeport
+  namespace: text-to-video
+  labels:
+    app: text-to-video-frontend
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
+    name: http
+  selector:
+    app: text-to-video-frontend
+---
+# NodePort Service for API
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-to-video-api-nodeport
+  namespace: text-to-video
+  labels:
+    app: text-to-video-api
+spec:
+  type: NodePort
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30800
+    name: http
+  selector:
+    app: text-to-video-api 

@@ -1,0 +1,63 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: text-to-video-ingress
+  namespace: text-to-video
+  labels:
+    app: text-to-video
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/client-max-body-size: "100m"
+spec:
+  rules:
+  - http:
+      paths:
+      # API routes
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: text-to-video-api
+            port:
+              number: 8000
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: text-to-video-api
+            port:
+              number: 8000
+      # Frontend routes
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: text-to-video-frontend
+            port:
+              number: 80
+---
+# NodePort Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-to-video-nodeport
+  namespace: text-to-video
+  labels:
+    app: text-to-video
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
+    name: frontend
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30800
+    name: api
+  selector:
+    app: text-to-video-frontend 

@@ -1,0 +1,222 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: text-to-video-api
+  namespace: text-to-video
+  labels:
+    app: text-to-video-api
+spec:
+  replicas: 2  # 2 replicas for high availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: text-to-video-api
+  template:
+    metadata:
+      labels:
+        app: text-to-video-api
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      affinity:
+        # Ensure pods are scheduled on GPU nodes
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: In
+                values:
+                - "true"
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - "NVIDIA-H100-80GB-HBM3"
+        # Prefer different nodes for redundancy
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - text-to-video-api
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+      - name: fix-permissions
+        image: busybox:1.35
+        command: ['sh', '-c']
+        args:
+        - |
+          chown -R 1000:1000 /app/model_cache /app/outputs
+          chmod -R 755 /app/model_cache /app/outputs
+          echo "Permissions fixed"
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/model_cache
+        - name: video-outputs
+          mountPath: /app/outputs
+        securityContext:
+          runAsUser: 0
+      containers:
+      - name: api
+        image: khaddad04/text-to-video-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: text-to-video-config
+              key: REDIS_URL
+        - name: MAX_CONCURRENT_JOBS
+          value: "4"  # Increased for H100 power
+        - name: MODEL_CACHE_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: text-to-video-config
+              key: MODEL_CACHE_DIR
+        - name: OUTPUT_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: text-to-video-config
+              key: OUTPUT_DIR
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              name: text-to-video-config
+              key: HOST
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: text-to-video-config
+              key: PORT
+        - name: WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: text-to-video-config
+              key: WORKERS
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: HF_HOME
+          value: "/app/model_cache"
+        - name: TRANSFORMERS_CACHE
+          value: "/app/model_cache"
+        - name: HF_DATASETS_CACHE
+          value: "/app/model_cache"
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/model_cache
+        - name: video-outputs
+          mountPath: /app/outputs
+        resources:
+          requests:
+            memory: "32Gi"  # Increased for H100
+            cpu: "8"
+            nvidia.com/gpu: 4  # 4 GPUs per replica (8 total)
+          limits:
+            memory: "64Gi"
+            cpu: "16"
+            nvidia.com/gpu: 4
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 120  # Longer for model loading
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 60  # Allow up to 10 minutes for startup
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-cache-pvc
+      - name: video-outputs
+        persistentVolumeClaim:
+          claimName: video-outputs-pvc
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-to-video-api
+  namespace: text-to-video
+  labels:
+    app: text-to-video-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app: text-to-video-api
+---
+# Horizontal Pod Autoscaler for the API
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: text-to-video-api-hpa
+  namespace: text-to-video
+  labels:
+    app: text-to-video-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: text-to-video-api
+  minReplicas: 2
+  maxReplicas: 4  # Maximum 4 replicas (16 GPUs total)
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 minutes
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60  # 1 minute
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60 

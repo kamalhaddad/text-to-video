@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-frontend-html
+  namespace: text-to-video
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Text-to-Video API - Demo Frontend</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                min-height: 100vh;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background: rgba(255,255,255,0.1);
+                border-radius: 15px;
+                padding: 30px;
+                backdrop-filter: blur(10px);
+            }
+            h1 {
+                text-align: center;
+                margin-bottom: 30px;
+                font-size: 2.5em;
+            }
+            .status-card {
+                background: rgba(255,255,255,0.2);
+                border-radius: 10px;
+                padding: 20px;
+                margin: 20px 0;
+            }
+            .status-ok {
+                border-left: 4px solid #4ade80;
+            }
+            .status-pending {
+                border-left: 4px solid #fbbf24;
+            }
+            button {
+                background: #4ade80;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 16px;
+                margin: 10px;
+                transition: all 0.3s;
+            }
+            button:hover {
+                background: #22c55e;
+                transform: translateY(-2px);
+            }
+            .gpu-info {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin: 20px 0;
+            }
+            .gpu-card {
+                background: rgba(255,255,255,0.1);
+                padding: 15px;
+                border-radius: 8px;
+                text-align: center;
+            }
+            .code-block {
+                background: rgba(0,0,0,0.3);
+                padding: 15px;
+                border-radius: 8px;
+                font-family: 'Courier New', monospace;
+                white-space: pre-wrap;
+                margin: 15px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎬 Text-to-Video API</h1>
+            <div class="status-card status-ok">
+                <h3>✅ Kubernetes Cluster Status</h3>
+                <p><strong>Connected:</strong> Voltage Park Cluster</p>
+                <p><strong>GPUs:</strong> 16x H100-80GB (81GB VRAM each)</p>
+                <p><strong>Total GPU Memory:</strong> ~1.3TB</p>
+                <p><strong>Nodes:</strong> 2 (g0364, g0365)</p>
+            </div>
+
+            <div class="status-card status-ok">
+                <h3>✅ Infrastructure Deployed</h3>
+                <p><strong>Redis:</strong> Job queue running</p>
+                <p><strong>Storage:</strong> 260GB persistent volumes bound</p>
+                <p><strong>Demo API:</strong> Running with GPU allocation</p>
+                <p><strong>Frontend:</strong> You're looking at it! 🎉</p>
+            </div>
+
+            <div class="status-card status-pending">
+                <h3>⏳ Next Steps</h3>
+                <p><strong>Full API:</strong> Deploy genmo/mochi-1-preview model</p>
+                <p><strong>React Frontend:</strong> Build and deploy custom UI</p>
+                <p><strong>Video Generation:</strong> Ready for text-to-video!</p>
+            </div>
+
+            <div class="gpu-info">
+                <div class="gpu-card">
+                    <h4>Available GPUs</h4>
+                    <div style="font-size: 2em; color: #4ade80;">16</div>
+                    <p>H100-80GB</p>
+                </div>
+                <div class="gpu-card">
+                    <h4>Estimated Throughput</h4>
+                    <div style="font-size: 2em; color: #60a5fa;">40+</div>
+                    <p>videos/hour</p>
+                </div>
+                <div class="gpu-card">
+                    <h4>Generation Time</h4>
+                    <div style="font-size: 2em; color: #f59e0b;">2-3</div>
+                    <p>minutes/video</p>
+                </div>
+            </div>
+
+            <h3>🔗 API Endpoints</h3>
+            <div class="code-block" id="api-endpoints">Loading API URLs...</div>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <button onclick="testAPI()">Test API Connection</button>
+                <button onclick="getSystemStatus()">Get System Status</button>
+            </div>
+
+            <div id="api-response" style="display: none;" class="status-card">
+                <h4>API Response:</h4>
+                <div id="response-content" class="code-block"></div>
+            </div>
+
+            <div class="status-card">
+                <h3>🚀 Deploy Full System</h3>
+                <p>To deploy the complete text-to-video system, build and push the container images, then deploy the full applications.</p>
+            </div>
+        </div>
+
+        <script>
+            // Get the current hostname and set API URLs
+            const currentHost = window.location.hostname;
+            const apiUrl = `http://${currentHost}:30800`;
+            document.getElementById('api-endpoints').textContent = 
+                `Health Check: ${apiUrl}/health\nSystem Status: ${apiUrl}/api/system/status`;
+
+            async function testAPI() {
+                try {
+                    const response = await fetch(`${apiUrl}/health`);
+                    const data = await response.json();
+                    document.getElementById('api-response').style.display = 'block';
+                    document.getElementById('response-content').textContent = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    document.getElementById('api-response').style.display = 'block';
+                    document.getElementById('response-content').textContent = `Error: ${error.message}`;
+                }
+            }
+
+            async function getSystemStatus() {
+                try {
+                    const response = await fetch(`${apiUrl}/api/system/status`);
+                    const data = await response.json();
+                    document.getElementById('api-response').style.display = 'block';
+                    document.getElementById('response-content').textContent = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    document.getElementById('api-response').style.display = 'block';
+                    document.getElementById('response-content').textContent = `Error: ${error.message}`;
+                }
+            }
+        </script>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-frontend
+  namespace: text-to-video
+  labels:
+    app: demo-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-frontend
+  template:
+    metadata:
+      labels:
+        app: demo-frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html-content
+          mountPath: /usr/share/nginx/html
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: html-content
+        configMap:
+          name: demo-frontend-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-frontend
+  namespace: text-to-video
+  labels:
+    app: demo-frontend
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
+  selector:
+    app: demo-frontend 

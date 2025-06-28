@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: text-to-video-api
+
+# Define the namespace for all resources
+namespace: text-to-video
+
+# Resources to apply in order
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - persistent-volumes.yaml
+  - redis.yaml
+  - api-deployment.yaml
+  - frontend-deployment.yaml
+  - ingress.yaml
+  - monitoring.yaml
+
+# Common labels for all resources
+commonLabels:
+  app.kubernetes.io/name: text-to-video-api
+  app.kubernetes.io/version: "1.0.0"
+  app.kubernetes.io/component: video-generation
+  app.kubernetes.io/part-of: text-to-video-system
+
+# Images to replace with environment-specific values
+images:
+  - name: text-to-video-api
+    newTag: latest
+  - name: text-to-video-frontend
+    newTag: latest
+
+# Configuration patches for different environments
+patchesStrategicMerge:
+  - patches/production.yaml
+
+# Resource transformers
+replicas:
+  - name: text-to-video-api
+    count: 2
+  - name: text-to-video-frontend
+    count: 2 

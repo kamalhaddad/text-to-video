@@ -1,0 +1,74 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: text-to-video-ingress
+  namespace: text-to-video
+  labels:
+    app: text-to-video
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/client-max-body-size: "100m"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-burst: "50"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: text-to-video.local  # Change this to your domain
+    http:
+      paths:
+      # API routes
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: text-to-video-api
+            port:
+              number: 8000
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: text-to-video-api
+            port:
+              number: 8000
+      # Frontend routes
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: text-to-video-frontend
+            port:
+              number: 80
+  # TLS configuration (uncomment and configure for production)
+  # tls:
+  # - hosts:
+  #   - text-to-video.local
+  #   secretName: text-to-video-tls
+---
+# Load Balancer Service (alternative to Ingress for cloud environments)
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-to-video-loadbalancer
+  namespace: text-to-video
+  labels:
+    app: text-to-video
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"  # For AWS
+    # cloud.google.com/load-balancer-type: "External"  # For GCP
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 80
+    name: frontend
+  - port: 8000
+    targetPort: 8000
+    name: api
+  selector:
+    app: text-to-video-frontend 

@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: text-to-video-api-monitor
+  namespace: text-to-video
+  labels:
+    app: text-to-video-api
+spec:
+  selector:
+    matchLabels:
+      app: text-to-video-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+---
+# Pod Disruption Budget for API
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: text-to-video-api-pdb
+  namespace: text-to-video
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: text-to-video-api
+---
+# Pod Disruption Budget for Frontend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: text-to-video-frontend-pdb
+  namespace: text-to-video
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: text-to-video-frontend
+---
+# Network Policy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: text-to-video-netpol
+  namespace: text-to-video
+spec:
+  podSelector:
+    matchLabels:
+      app: text-to-video-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: text-to-video-frontend
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []  # Allow outbound internet for model downloads
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80 

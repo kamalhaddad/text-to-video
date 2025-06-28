@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: text-to-video
+  labels:
+    name: text-to-video
+    app.kubernetes.io/name: text-to-video-api
+    app.kubernetes.io/part-of: text-to-video-system 
