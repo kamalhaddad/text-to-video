@@ -38,11 +38,10 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: accelerator
+              - key: nvidia.com/gpu.product
                 operator: In
                 values:
-                - nvidia-tesla-h100
-                - nvidia-tesla-a100
+                - NVIDIA-H100-80GB-HBM3
       tolerations:
       # Allow scheduling on GPU nodes
       - key: nvidia.com/gpu
@@ -50,7 +49,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: api
-        image: text-to-video-api:latest
+        image: khaddad04/text-to-video-api:callback-fix-20250628-140000
         imagePullPolicy: Always
         ports:
         - containerPort: 8000

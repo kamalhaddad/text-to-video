@@ -18,4 +18,7 @@ aiofiles==23.2.1
 python-multipart==0.0.6
 httpx==0.25.2
 psutil==5.9.6
-pynvml==11.5.0 
+pynvml==11.5.0
+opencv-python==4.8.1.78
+imageio==2.31.5
+imageio-ffmpeg==0.4.9 

@@ -79,7 +79,7 @@ class VideoGenerator:
             num_inference_steps: Number of denoising steps (default 64 for Mochi)
             guidance_scale: How closely to follow the prompt (default 4.5 for Mochi)
             seed: Random seed for reproducible results
-            progress_callback: Function to call with progress updates
+            progress_callback: Function to call with progress updates (can be sync or async)
             
         Returns:
             Path to generated video file or None if failed
@@ -97,18 +97,47 @@ class VideoGenerator:
             
             # Generate timestamp for unique filename
             timestamp = int(time.time())
-            output_path = f"./outputs/video_{timestamp}.mp4"
+            output_path = f"/app/outputs/video_{timestamp}.mp4"
             
             self.logger.info(f"Generating video: {prompt[:50]}...")
             
-            if progress_callback:
-                progress_callback(0, 100, "Starting video generation...")
-            
-            # Create custom callback for progress updates
-            def pipeline_callback(self_pipe, step: int, timestep: int, callback_kwargs):
+            # Helper to call progress callback (handles both sync and async)
+            def call_progress_callback(current: int, total: int, message: str):
                 if progress_callback:
-                    progress = int((step / num_inference_steps) * 90)  # Reserve 10% for post-processing
-                    progress_callback(progress, 100, f"Generating step {step+1}/{num_inference_steps}")
+                    try:
+                        # Try calling as async first
+                        if asyncio.iscoroutinefunction(progress_callback):
+                            # Create a task if we're in an async context
+                            try:
+                                loop = asyncio.get_event_loop()
+                                if loop.is_running():
+                                    # If loop is running, we can't await, so schedule the coroutine
+                                    asyncio.create_task(progress_callback(current, total, message))
+                                else:
+                                    # Loop not running, we can run until complete
+                                    loop.run_until_complete(progress_callback(current, total, message))
+                            except RuntimeError:
+                                # Fallback: convert to sync behavior
+                                self.logger.debug(f"Progress: {current}/{total} - {message}")
+                        else:
+                            # Call as sync function
+                            progress_callback(current, total, message)
+                    except Exception as e:
+                        self.logger.warning(f"Progress callback failed: {e}")
+            
+            call_progress_callback(0, 100, "Starting video generation...")
+            
+            # Define progress callback that works with diffusers
+            def pipeline_callback(self_pipe, step, timestep, callback_kwargs):
+                """Progress callback for diffusers pipeline"""
+                if progress_callback:
+                    # logging.info(f"Pipeline callback called with step: {step}, timestep: {timestep}, callback_kwargs: {callback_kwargs}, self_pipe: {self_pipe}")
+                    progress_percent = int((step / num_inference_steps) * 100)
+                    status_msg = f"Generating frame {step}/{num_inference_steps}"
+                    try:
+                        call_progress_callback(step, num_inference_steps, status_msg)
+                    except Exception as e:
+                        logging.warning(f"Progress callback error: {e}")
                 return callback_kwargs
             
             # Generate video with autocast for memory efficiency
@@ -127,15 +156,13 @@ class VideoGenerator:
                     output_type="pil"
                 )
             
-            if progress_callback:
-                progress_callback(90, 100, "Processing video output...")
+            call_progress_callback(90, 100, "Processing video output...")
             
             # Export video frames to MP4
             frames = result.frames[0]
             export_to_video(frames, output_path, fps=30)
             
-            if progress_callback:
-                progress_callback(100, 100, "Video generation completed!")
+            call_progress_callback(100, 100, "Video generation completed!")
             
             self.logger.info(f"Video generated successfully: {output_path}")
             return output_path
@@ -143,7 +170,7 @@ class VideoGenerator:
         except Exception as e:
             self.logger.error(f"Video generation failed: {str(e)}")
             if progress_callback:
-                progress_callback(-1, 100, f"Error: {str(e)}")
+                call_progress_callback(-1, 100, f"Error: {str(e)}")
             return None
     
     def get_model_info(self) -> Dict[str, Any]:

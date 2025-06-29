@@ -338,25 +338,35 @@ class JobManager:
             device = f"cuda:{gpu_id}"
             generator = VideoGenerator(device=device)
             
-            # Generate video with progress callback
-            async def progress_callback(current: int, total: int, message: str):
-                progress = (current / total) * 100 if total > 0 else 0
-                await self._update_job_status(job_id, JobStatus.PROCESSING, progress=progress)
+            # Store reference to the main event loop
+            main_loop = asyncio.get_event_loop()
             
-            # Run video generation in executor since it's now synchronous
-            loop = asyncio.get_event_loop()
-            output_path = await loop.run_in_executor(
+            # Create a sync progress callback that safely updates job status
+            def sync_progress_callback(current: int, total: int, message: str):
+                """Thread-safe progress callback"""
+                try:
+                    progress = (current / total) * 100 if total > 0 else 0
+                    # Use threadsafe method to schedule the coroutine on the main loop
+                    asyncio.run_coroutine_threadsafe(
+                        self._update_job_status(job_id, JobStatus.PROCESSING, progress=progress),
+                        main_loop
+                    )
+                except Exception as e:
+                    logging.warning(f"Progress update failed for job {job_id}: {e}")
+            
+            # Run video generation in executor
+            output_path = await main_loop.run_in_executor(
                 None,
                 lambda: generator.generate_video(
                     prompt=job.prompt,
                     negative_prompt=getattr(job.parameters, 'negative_prompt', ''),
-                    num_frames=getattr(job.parameters, 'num_frames', 49),
+                    num_frames=getattr(job.parameters, 'num_frames', 85),
                     height=getattr(job.parameters, 'height', 480),
-                    width=getattr(job.parameters, 'width', 720),
-                    num_inference_steps=getattr(job.parameters, 'num_inference_steps', 50),
-                    guidance_scale=getattr(job.parameters, 'guidance_scale', 6.0),
+                    width=getattr(job.parameters, 'width', 848),
+                    num_inference_steps=getattr(job.parameters, 'num_inference_steps', 64),
+                    guidance_scale=getattr(job.parameters, 'guidance_scale', 4.5),
                     seed=getattr(job.parameters, 'seed', None),
-                    progress_callback=None  # Can't use async callback in executor
+                    progress_callback=sync_progress_callback  # Enable progress updates
                 )
             )
             

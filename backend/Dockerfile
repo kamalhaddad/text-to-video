@@ -34,7 +34,14 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA support - use exact versions that work together
 RUN pip3 install --no-cache-dir torch==2.1.1+cu118 torchvision==0.16.1+cu118 torchaudio==2.1.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+
+# Verify CUDA installation
+RUN python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'PyTorch version: {torch.__version__}')"
+
+# Install remaining dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy application code

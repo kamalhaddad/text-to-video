@@ -214,13 +214,39 @@ async def download_video(job_id: str):
                 detail=f"Job is not completed. Current status: {job.status}"
             )
         
-        if not job.output_path or not os.path.exists(job.output_path):
+        if not job.output_path:
+            raise HTTPException(status_code=404, detail="No output path specified")
+        
+        # Try to find the video file with multiple fallback strategies
+        video_path = None
+        
+        # Strategy 1: Try the stored path directly
+        if os.path.exists(job.output_path):
+            video_path = job.output_path
+        
+        # Strategy 2: If stored path is relative, try converting to absolute
+        elif not os.path.isabs(job.output_path):
+            absolute_path = os.path.join("/app", job.output_path.lstrip("./"))
+            if os.path.exists(absolute_path):
+                video_path = absolute_path
+        
+        # Strategy 3: Try finding the file by basename in outputs directory
+        if not video_path:
+            filename = os.path.basename(job.output_path)
+            fallback_path = f"/app/outputs/{filename}"
+            if os.path.exists(fallback_path):
+                video_path = fallback_path
+        
+        # If still not found, log the paths tried and fail
+        if not video_path:
+            logger.error(f"Video file not found for job {job_id}. Tried paths: {job.output_path}, /app/outputs/{os.path.basename(job.output_path)}")
             raise HTTPException(status_code=404, detail="Video file not found")
         
         # Return file
-        filename = os.path.basename(job.output_path)
+        filename = os.path.basename(video_path)
+        logger.info(f"Serving video file: {video_path}")
         return FileResponse(
-            job.output_path,
+            video_path,
             media_type="video/mp4",
             filename=filename,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
